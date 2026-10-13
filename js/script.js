@@ -161,5 +161,12 @@ function lerParametrosDaURL() {
   if (achou) calcular();
 }
 
+// Ao tocar em um campo, seleciona o valor todo para já poder digitar por cima.
+document.querySelectorAll("input").forEach(function (campo) {
+  campo.addEventListener("focus", function () {
+    campo.select();
+  });
+});
+
 carregarAjustes();
 lerParametrosDaURL();
