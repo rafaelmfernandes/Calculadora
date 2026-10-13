@@ -9,6 +9,7 @@
    - Ignorar o preço informativo por quilômetro.
    - Identificar o trajeto até o passageiro.
    - Identificar o trajeto percorrido com o passageiro.
+   - Corrigir confusões comuns do OCR nos minutos.
    - Converter metros para quilômetros automaticamente.
    - Calcular custo, lucro e rentabilidade.
    - Salvar as configurações do usuário.
@@ -214,42 +215,82 @@ function calcular() {
 
 
 /* =========================================================
-   5. NORMALIZAR O TEXTO
+   5. NORMALIZAR O TEXTO RECEBIDO PELA URL
 
-   Aceita:
+   Corrige:
    - Espaços normais e especiais.
    - Quebras de linha.
-   - Ponto ou vírgula decimal.
    - Diferenças de maiúsculas e minúsculas.
+   - Confusões específicas do OCR nos minutos.
 
-   Mantém as quebras de linha para ajudar na leitura
-   de informações distribuídas em linhas diferentes.
+   CORREÇÃO IMPORTANTE:
+   O OCR pode ler "11 minutos" como "1l minutos",
+   confundindo o segundo número 1 com a letra "l".
+
+   Também pode confundir o número 1 com a letra "I".
+
+   Corrigimos essas confusões somente quando aparecem
+   imediatamente antes da palavra "min", "mins",
+   "minuto" ou "minutos".
+
+   Exemplos:
+   1l minutos -> 11 minutos
+   1I minutos -> 11 minutos
+   1l min     -> 11 min
+
+   Não fazemos substituições globais de letras no texto,
+   para não alterar nomes, endereços ou o valor da oferta.
    ========================================================= */
 
 function normalizarTexto(texto) {
-  return String(texto || "")
+  let resultado = String(texto || "")
     .normalize("NFKC")
     .replace(/[\u00A0\u202F\u2007]/g, " ")
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t]+/g, " ")
     .replace(/\n[ \t]*/g, "\n")
     .trim();
+
+  /*
+   * Corrige a confusão do OCR somente nos números
+   * imediatamente anteriores à unidade de minutos.
+   *
+   * Exemplos:
+   * 1l minutos -> 11 minutos
+   * 1I minutos -> 11 minutos
+   *
+   * A função callback evita ambiguidades na substituição
+   * de grupos numéricos do JavaScript.
+   */
+  resultado = resultado.replace(
+    /\b(\d{1,2})[lI](?=\s*min(?:uto)?s?\b)/gi,
+    function (correspondencia, digitos) {
+      return digitos + "1";
+    }
+  );
+
+  return resultado;
 }
 
 
 /* =========================================================
-   6. EXTRAIR O VALOR DA OFERTA
+   6. EXTRAIR O VALOR TOTAL DA OFERTA
 
    Exemplos:
    R$ 19,90
    R$ 19.99
    R$19,99
+   R$ 8,86
 
    IMPORTANTE:
-   R$ 1,82/Km e R$ 1,29/km são valores informativos
-   por quilômetro e NÃO são o preço total da oferta.
+   R$ 1,82/Km
+   R$ 1,29/km aprox.
 
-   A função ignora valores monetários seguidos por /km.
+   Esses valores são informativos por quilômetro e NÃO
+   devem ser usados como valor total da corrida.
+
+   A função ignora valores monetários seguidos por /km,
+   mesmo que depois apareça a palavra "aprox.".
    ========================================================= */
 
 function extrairValor(texto) {
@@ -265,7 +306,7 @@ function extrairValor(texto) {
 
     const restante = texto.slice(regexValor.lastIndex);
 
-    // Ignora o preço informativo por quilômetro.
+    // Ignora valores como R$ 1,21/km ou R$ 1,29/km aprox.
     if (/^\s*\/\s*km\b/i.test(restante)) {
       continue;
     }
@@ -308,17 +349,19 @@ function extrairValor(texto) {
    REGRA:
    - Distâncias em metros são divididas por 1.000.
    - Distâncias em quilômetros permanecem em quilômetros.
-
-   Para metros, um número como "1.200 m" representa
-   1.200 metros, usando o ponto como separador de milhar.
    ========================================================= */
 
 function converterDistanciaParaKm(valorTexto, unidadeTexto) {
-  if (!valorTexto || !unidadeTexto) {
+  if (
+    valorTexto === null ||
+    valorTexto === undefined ||
+    !unidadeTexto
+  ) {
     return null;
   }
 
   let textoNumero = String(valorTexto).trim();
+
   const unidade = String(unidadeTexto)
     .trim()
     .toLowerCase()
@@ -332,15 +375,13 @@ function converterDistanciaParaKm(valorTexto, unidadeTexto) {
 
   if (estaEmMetros) {
     /*
-     * Em metros, "1.200" ou "1,200" é interpretado
-     * como 1200 metros quando há exatamente três
-     * algarismos após o separador.
+     * Em distâncias expressas em metros, interpreta
+     * "1.200" e "1,200" como 1200 metros.
      *
      * Exemplos:
-     * 1.200 m -> 1200 m
-     * 1,200 m -> 1200 m
-     * 960 m   -> 960 m
-     * 960,5 m -> 960.5 m
+     * 1.200 m -> 1.2 km
+     * 960 m   -> 0.96 km
+     * 960,5 m -> 0.9605 km
      */
     if (/^\d{1,3}[.,]\d{3}$/.test(textoNumero)) {
       textoNumero = textoNumero.replace(/[.,]/g, "");
@@ -358,13 +399,12 @@ function converterDistanciaParaKm(valorTexto, unidadeTexto) {
   }
 
   /*
-   * Para quilômetros:
+   * Para quilômetros, ponto e vírgula são aceitos
+   * como separadores decimais.
+   *
+   * Exemplos:
    * 14,6 km -> 14.6
    * 14.6 km -> 14.6
-   * 1.200 km -> 1.2
-   *
-   * Se houver ponto e vírgula juntos, considera
-   * o ponto como separador de milhar.
    */
   if (
     textoNumero.includes(".") &&
@@ -400,21 +440,19 @@ function converterDistanciaParaKm(valorTexto, unidadeTexto) {
    4 min (0.9 km)
    33 minutos (14.6 km)
 
-   Distâncias em metros:
+   Com metros:
    4 min (960 m)
-   33 min (14.6 km)
+   4 min (960 metros)
+
+   Com erro comum de OCR:
+   3 min (1.3 km)
+   1l minutos (6.0 km)
 
    Também aceita:
-   4 min (960 metros)
-   4 minutos (960 m)
-   5 mins (1,7 quilômetros)
-
-   Formatos com informações em linhas separadas:
-   4 min
-   960 m
-
-   33 minutos
-   14.6 km
+   11 min (6.0 km)
+   11 mins (6.0 km)
+   11 minuto (6,0 km)
+   11 minutos (6.0 km)
 
    Os trajetos são retornados na ordem em que aparecem:
    1º = busca do passageiro.
@@ -425,13 +463,11 @@ function extrairTrajetos(texto) {
   const trajetos = [];
 
   /*
-   * Expressão numérica que aceita:
+   * Formatos numéricos aceitos para as distâncias:
    * 960
    * 0.9
    * 14,6
    * 1.200
-   *
-   * Também permite números com separadores de milhar.
    */
   const numeroDistancia =
     "\\d{1,3}(?:[.,]\\d{3})+(?:[.,]\\d+)?|\\d+(?:[.,]\\d+)?";
@@ -440,12 +476,20 @@ function extrairTrajetos(texto) {
    * Unidades aceitas:
    * km, kms, quilômetro, quilômetros,
    * m, metro, metros.
-   *
-   * A unidade km aparece antes de m para
-   * identificar corretamente os quilômetros.
    */
   const unidadeDistancia =
     "(?:quil[oô]metros?|kms?|km|metros?|m)";
+
+  /*
+   * O número de minutos aceita:
+   * 3
+   * 11
+   * 33
+   *
+   * A normalização anterior corrige "1l" para "11"
+   * antes de esta expressão analisar o texto.
+   */
+  const numeroMinutos = "(\\d{1,3})";
 
   /*
    * PRIMEIRA TENTATIVA:
@@ -454,12 +498,13 @@ function extrairTrajetos(texto) {
    * dentro do mesmo bloco entre parênteses.
    *
    * Exemplos:
-   * 5 min (1,7 km)
+   * 3 min (1.3 km)
+   * 11 minutos (6.0 km)
    * 4 min (960 m)
-   * 33 minutos (14.6 km)
    */
   const regexCompleto = new RegExp(
-    "(\\d{1,3})\\s*min(?:uto)?s?\\s*" +
+    numeroMinutos +
+    "\\s*min(?:uto)?s?\\s*" +
     "\\(\\s*(" + numeroDistancia + ")\\s*" +
     "(" + unidadeDistancia + ")\\s*\\)",
     "gi"
@@ -504,7 +549,7 @@ function extrairTrajetos(texto) {
    * Algumas capturas OCR separam minutos e distância
    * em linhas diferentes.
    *
-   * Exemplo:
+   * Exemplos:
    * 4 min
    * 960 m
    *
