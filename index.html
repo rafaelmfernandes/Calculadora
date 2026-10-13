@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Corridas">
+  <meta name="theme-color" content="#111827">
+  <title>Calculadora de Corridas</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Vale a pena?</h1>
+    <p class="subtitle">Digite os dados da corrida e veja o lucro real.</p>
+
+    <section class="card">
+      <h2>Corrida</h2>
+
+      <label for="valor">Valor da corrida (R$)</label>
+      <input id="valor" type="number" inputmode="decimal" step="0.01" placeholder="19,90">
+
+      <div class="row">
+        <div>
+          <label for="kmBusca">Km até o passageiro</label>
+          <input id="kmBusca" type="number" inputmode="decimal" step="0.1" placeholder="1,7">
+        </div>
+        <div>
+          <label for="minBusca">Min até o passageiro</label>
+          <input id="minBusca" type="number" inputmode="decimal" step="1" placeholder="5">
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="kmCorrida">Km da corrida</label>
+          <input id="kmCorrida" type="number" inputmode="decimal" step="0.1" placeholder="9,3">
+        </div>
+        <div>
+          <label for="minCorrida">Min da corrida</label>
+          <input id="minCorrida" type="number" inputmode="decimal" step="1" placeholder="34">
+        </div>
+      </div>
+
+      <button id="btnCalcular" type="button">Calcular</button>
+    </section>
+
+    <section id="resultado" class="card resultado oculto">
+      <h2 id="veredito"></h2>
+      <ul>
+        <li>Total rodado: <strong id="rKm"></strong></li>
+        <li>Tempo total: <strong id="rMin"></strong></li>
+        <li>Gasto com combustível: <strong id="rCusto"></strong></li>
+        <li>Lucro real: <strong id="rLucro"></strong></li>
+        <li>Lucro por km: <strong id="rLucroKm"></strong></li>
+        <li>Lucro por minuto: <strong id="rLucroMin"></strong></li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Ajustes</h2>
+
+      <label for="custoKm">Custo de combustível por km (R$)</label>
+      <input id="custoKm" type="number" inputmode="decimal" step="0.01" value="0.54">
+
+      <label for="metaMin">Meta de lucro por minuto (R$)</label>
+      <input id="metaMin" type="number" inputmode="decimal" step="0.01" value="0.70">
+    </section>
+  </main>
+
+  <script src="js/script.js"></script>
+</body>
+</html>
