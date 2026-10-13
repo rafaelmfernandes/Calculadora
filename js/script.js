@@ -103,4 +103,63 @@ document.getElementById("btnCalcular").addEventListener("click", calcular);
 campos.custoKm.addEventListener("change", salvarAjustes);
 campos.metaMin.addEventListener("change", salvarAjustes);
 
+// Preenche os campos a partir da URL, por exemplo:
+// ?valor=19.90&kmBusca=1.7&minBusca=5&kmCorrida=9.3&minCorrida=34
+// Assim o app Atalhos consegue abrir a calculadora já com a corrida calculada.
+// Extrai os dados do texto lido do print da 99/Uber (parametro "texto").
+// Valor: primeiro "R$ 19,90". Trajetos: "5 min (1,7 km)" e "34 min (9,3 km)".
+function preencherPeloTexto(texto) {
+  const matchValor = texto.match(/R\$\s*(\d+(?:[.,]\d{1,2})?)/i);
+  const trajetos = [];
+  const regexTrajeto = /(\d+)\s*min\s*\(\s*(\d+(?:[.,]\d+)?)\s*km\s*\)/gi;
+  let m;
+  while ((m = regexTrajeto.exec(texto)) !== null) {
+    trajetos.push({ min: m[1], km: m[2].replace(",", ".") });
+  }
+
+  if (!matchValor || trajetos.length === 0) {
+    alert("Não consegui ler a corrida no print. Tente de novo.");
+    return false;
+  }
+
+  campos.valor.value = matchValor[1].replace(",", ".");
+
+  if (trajetos.length >= 2) {
+    campos.minBusca.value = trajetos[0].min;
+    campos.kmBusca.value = trajetos[0].km;
+    campos.minCorrida.value = trajetos[1].min;
+    campos.kmCorrida.value = trajetos[1].km;
+  } else {
+    campos.minBusca.value = 0;
+    campos.kmBusca.value = 0;
+    campos.minCorrida.value = trajetos[0].min;
+    campos.kmCorrida.value = trajetos[0].km;
+  }
+  return true;
+}
+
+function lerParametrosDaURL() {
+  const params = new URLSearchParams(window.location.search);
+
+  const texto = params.get("texto");
+  if (texto) {
+    if (preencherPeloTexto(texto)) calcular();
+    return;
+  }
+
+  const nomes = ["valor", "kmBusca", "minBusca", "kmCorrida", "minCorrida"];
+  let achou = false;
+
+  nomes.forEach(function (nome) {
+    const v = params.get(nome);
+    if (v !== null && v !== "") {
+      campos[nome].value = v.replace(",", ".");
+      achou = true;
+    }
+  });
+
+  if (achou) calcular();
+}
+
 carregarAjustes();
+lerParametrosDaURL();
