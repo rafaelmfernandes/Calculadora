@@ -1,3 +1,4 @@
+
 const campos = {
   valor: document.getElementById("valor"),
   kmBusca: document.getElementById("kmBusca"),
@@ -19,7 +20,8 @@ const saida = {
   lucroMin: document.getElementById("rLucroMin"),
 };
 
-// Lê um número do campo aceitando vírgula ou ponto. Campo vazio vira 0.
+// Lê um número do campo aceitando vírgula ou ponto.
+// Campo vazio ou inválido retorna 0.
 function lerNumero(input) {
   const texto = String(input.value).replace(",", ".").trim();
   const numero = parseFloat(texto);
@@ -27,7 +29,10 @@ function lerNumero(input) {
 }
 
 function dinheiro(n) {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function numero(n, casas) {
@@ -43,7 +48,7 @@ function salvarAjustes() {
     localStorage.setItem("custoKm", campos.custoKm.value);
     localStorage.setItem("metaMin", campos.metaMin.value);
   } catch (e) {
-    // Se o navegador bloquear o armazenamento, só segue sem salvar.
+    // Se o navegador bloquear o armazenamento, continua normalmente.
   }
 }
 
@@ -51,17 +56,25 @@ function carregarAjustes() {
   try {
     const custo = localStorage.getItem("custoKm");
     const meta = localStorage.getItem("metaMin");
+
     if (custo) campos.custoKm.value = custo;
     if (meta) campos.metaMin.value = meta;
   } catch (e) {
-    // Sem armazenamento, mantém os valores padrão do HTML.
+    // Mantém os valores padrão do HTML.
   }
 }
 
 function calcular() {
   const valor = lerNumero(campos.valor);
-  const kmTotal = lerNumero(campos.kmBusca) + lerNumero(campos.kmCorrida);
-  const minTotal = lerNumero(campos.minBusca) + lerNumero(campos.minCorrida);
+
+  const kmTotal =
+    lerNumero(campos.kmBusca) +
+    lerNumero(campos.kmCorrida);
+
+  const minTotal =
+    lerNumero(campos.minBusca) +
+    lerNumero(campos.minCorrida);
+
   const custoKm = lerNumero(campos.custoKm);
   const metaMin = lerNumero(campos.metaMin);
 
@@ -96,77 +109,171 @@ function calcular() {
   }
 
   saida.caixa.classList.remove("oculto");
-  saida.caixa.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  saida.caixa.scrollIntoView({
+    behavior: "smooth",
+    block: "nearest",
+  });
 }
 
-document.getElementById("btnCalcular").addEventListener("click", calcular);
+document
+  .getElementById("btnCalcular")
+  .addEventListener("click", calcular);
+
 campos.custoKm.addEventListener("change", salvarAjustes);
 campos.metaMin.addEventListener("change", salvarAjustes);
 
-// Preenche os campos a partir da URL, por exemplo:
-// ?valor=19.90&kmBusca=1.7&minBusca=5&kmCorrida=9.3&minCorrida=34
-// Assim o app Atalhos consegue abrir a calculadora já com a corrida calculada.
-// Extrai os dados do texto lido do print da 99/Uber (parametro "texto").
-// Valor: primeiro "R$ 19,90". Trajetos: "5 min (1,7 km)" e "34 min (9,3 km)".
-function preencherPeloTexto(texto) {
-  const matchValor = texto.match(/R\$\s*(\d+(?:[.,]\d{1,2})?)/i);
-  const trajetos = [];
-  const regexTrajeto = /(\d+)\s*min\s*\(\s*(\d+(?:[.,]\d+)?)\s*km\s*\)/gi;
-  let m;
-  while ((m = regexTrajeto.exec(texto)) !== null) {
-    trajetos.push({ min: m[1], km: m[2].replace(",", ".") });
-  }
+// =========================================================
+// LEITURA DO TEXTO EXTRAÍDO DO PRINT
+//
+// Aceita ofertas da 99 e da Uber.
+// Exemplos de trajetos reconhecidos:
+//
+// 3 min (0,8 km)
+// 3 mins (0.8 km)
+// 9 minuto (3,7 km)
+// 9 minutos (3.7 km)
+//
+// Também aceita quebras de linha e espaços entre os elementos.
+// =========================================================
 
-  if (!matchValor || trajetos.length === 0) {
-    alert("Não consegui ler a corrida no print. Tente de novo.");
+function preencherPeloTexto(texto) {
+  if (!texto || !String(texto).trim()) {
+    alert("O texto recebido está vazio. Não consegui ler a corrida.");
     return false;
   }
 
+  // Normaliza espaços especiais que podem aparecer no OCR.
+  const textoNormalizado = String(texto)
+    .replace(/\u00A0/g, " ")
+    .replace(/\u202F/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Procura o valor da corrida, por exemplo:
+  // R$ 6,75
+  // R$ 11,51
+  // R$ 19.90
+  const matchValor = textoNormalizado.match(
+    /R\$\s*(\d+(?:[.,]\d{1,2})?)/i
+  );
+
+  const trajetos = [];
+
+  // CORREÇÃO:
+  // Aceita "min", "mins", "minuto" e "minutos".
+  // Aceita decimais com ponto ou vírgula.
+  const regexTrajeto =
+    /(\d+)\s*min(?:uto)?s?\s*\(\s*(\d+(?:[.,]\d+)?)\s*km\s*\)/gi;
+
+  let m;
+
+  while ((m = regexTrajeto.exec(textoNormalizado)) !== null) {
+    trajetos.push({
+      min: m[1],
+      km: m[2].replace(",", "."),
+    });
+  }
+
+  // Sem valor ou sem nenhum trajeto, não preenche os campos.
+  if (!matchValor || trajetos.length === 0) {
+    console.warn("Não foi possível interpretar a oferta.", {
+      textoRecebido: texto,
+      textoNormalizado: textoNormalizado,
+      valorEncontrado: matchValor ? matchValor[0] : null,
+      trajetosEncontrados: trajetos,
+    });
+
+    alert(
+      "Não consegui ler a corrida no print. " +
+      "Verifique se o texto recebido contém o valor e os trajetos."
+    );
+
+    return false;
+  }
+
+  // Preenche o valor da corrida.
   campos.valor.value = matchValor[1].replace(",", ".");
 
+  // Quando há dois trajetos:
+  // Primeiro = deslocamento até o passageiro.
+  // Segundo = viagem com o passageiro.
   if (trajetos.length >= 2) {
     campos.minBusca.value = trajetos[0].min;
     campos.kmBusca.value = trajetos[0].km;
+
     campos.minCorrida.value = trajetos[1].min;
     campos.kmCorrida.value = trajetos[1].km;
   } else {
+    // Se houver apenas um trajeto, considera-o como a corrida.
     campos.minBusca.value = 0;
     campos.kmBusca.value = 0;
+
     campos.minCorrida.value = trajetos[0].min;
     campos.kmCorrida.value = trajetos[0].km;
   }
+
   return true;
 }
+
+// =========================================================
+// LEITURA DOS PARÂMETROS DA URL
+//
+// Exemplos:
+//
+// ?valor=19.90&kmBusca=1.7&minBusca=5&kmCorrida=9.3&minCorrida=34
+//
+// ?texto=R%24%2011%2C51%202%20min%20%280.6%20km%29
+//
+// O parâmetro "texto" tem prioridade quando está presente.
+// =========================================================
 
 function lerParametrosDaURL() {
   const params = new URLSearchParams(window.location.search);
 
   const texto = params.get("texto");
+
   if (texto) {
-    if (preencherPeloTexto(texto)) calcular();
+    if (preencherPeloTexto(texto)) {
+      calcular();
+    }
+
     return;
   }
 
-  const nomes = ["valor", "kmBusca", "minBusca", "kmCorrida", "minCorrida"];
+  const nomes = [
+    "valor",
+    "kmBusca",
+    "minBusca",
+    "kmCorrida",
+    "minCorrida",
+  ];
+
   let achou = false;
 
   nomes.forEach(function (nome) {
     const v = params.get(nome);
+
     if (v !== null && v !== "") {
       campos[nome].value = v.replace(",", ".");
       achou = true;
     }
   });
 
-  if (achou) calcular();
+  if (achou) {
+    calcular();
+  }
 }
 
-// Ao tocar em um campo, seleciona o valor todo para já poder digitar por cima.
+// Ao tocar em um campo, seleciona o valor todo
+// para permitir substituição rápida.
 document.querySelectorAll("input").forEach(function (campo) {
   campo.addEventListener("focus", function () {
     campo.select();
   });
 });
 
+// Inicialização.
 carregarAjustes();
 lerParametrosDaURL();
+
